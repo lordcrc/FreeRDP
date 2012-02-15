@@ -350,6 +350,66 @@ INLINE int gdi_PtInRect(HGDI_RECT rc, int x, int y)
 }
 
 /**
+ * Checks if the given rectangle is empty.
+ * @msdn{dd145017}
+ * @param rc rectangle to check
+ * @return 1 if the rectangle is empty, 0 otherwise
+ */
+INLINE int gdi_IsRectEmpty(HGDI_RECT rc)
+{
+	if (rc->left   == 0 && 
+	    rc->right  == 0 && 
+	    rc->top    == 0 && 
+	    rc->bottom == 0)
+	{
+		return 1;
+	}
+	return 0;
+}
+
+/**
+ * Creates a rectangle which is the smallest rectangle which contains both 
+ * source rectangles.\n
+ * @msdn{dd145163}
+ * @param rcDest rectangle which will contain the two source rectangles
+ * @param rcSrc1 first source rectangle
+ * @param rcSrc2 second source rectangle
+ * @return 1 if the output is a nonempty rectangle, 0 otherwise
+ */
+INLINE int gdi_UnionRect(HGDI_RECT rcDest, HGDI_RECT rcSrc1, HGDI_RECT rcSrc2)
+{
+	int src1_empty, src2_empty;
+	
+	src1_empty = gdi_IsRectEmpty(rcSrc1);
+	src2_empty = gdi_IsRectEmpty(rcSrc2);
+	
+	if (!src1_empty && !src2_empty)
+	{
+		rcDest->left = MIN(rcSrc1->left, rcSrc2->left);
+		rcDest->right = MAX(rcSrc1->right, rcSrc2->right);
+		rcDest->top = MIN(rcSrc1->top, rcSrc2->top);
+		rcDest->bottom = MAX(rcSrc1->bottom, rcSrc2->bottom);
+		return 1;
+	}	
+	
+	if (src1_empty && !src2_empty)
+	{
+		gdi_CopyRect(rcDest, rcSrc2);
+		return 1;
+	}
+	
+	if (!src1_empty && src2_empty)
+	{
+		gdi_CopyRect(rcDest, rcSrc1);
+		return 1;
+	}
+	
+	/* both source rectangles are empty, return empty */
+	gdi_SetRect(rcDest, 0, 0, 0, 0);
+	return 0;
+}
+
+/**
  * Invalidate a given region, such that it is redrawn on the next region update.\n
  * @msdn{dd145003}
  * @param hdc device context
