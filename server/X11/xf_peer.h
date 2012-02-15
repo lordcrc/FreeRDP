@@ -46,7 +46,6 @@ struct xf_peer_context
 	pthread_mutex_t mutex;
 	RFX_CONTEXT* rfx_context;
 	xfEventQueue* event_queue;
-	pthread_t frame_rate_thread;
 };
 
 void xf_peer_accepted(freerdp_listener* instance, freerdp_peer* client);

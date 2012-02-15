@@ -703,10 +703,8 @@ void* xf_peer_main_loop(void* arg)
 	client->Disconnect(client);
 	
 	pthread_cancel(xfp->thread);
-	pthread_cancel(xfp->frame_rate_thread);
 	
 	pthread_join(xfp->thread, NULL);
-	pthread_join(xfp->frame_rate_thread, NULL);
 	
 	freerdp_peer_context_free(client);
 	freerdp_peer_free(client);

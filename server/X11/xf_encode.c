@@ -71,105 +71,85 @@ void xf_xdamage_subtract_region(xfPeerContext* xfp, int x, int y, int width, int
 #endif
 }
 
-void* xf_frame_rate_thread(void* param)
-{
-	xfInfo* xfi;
-	xfEvent* event;
-	xfPeerContext* xfp;
-	freerdp_peer* client;
-	uint32 wait_interval;
-
-	client = (freerdp_peer*) param;
-	xfp = (xfPeerContext*) client->context;
-	xfi = xfp->info;
-
-	wait_interval = 1000000 / xfp->fps;
-
-	while (1)
-	{
-		// check if we should terminate
-		pthread_testcancel();
-		
-		event = xf_event_new(XF_EVENT_TYPE_FRAME_TICK);
-		xf_event_push(xfp->event_queue, (xfEvent*) event);
-		freerdp_usleep(wait_interval);
-	}
-}
-
 void* xf_monitor_updates(void* param)
 {
-	int fds;
 	xfInfo* xfi;
 	XEvent xevent;
-	fd_set rfds_set;
-	int select_status;
 	int pending_events;
 	xfPeerContext* xfp;
 	freerdp_peer* client;
 	uint32 wait_interval;
-	struct timeval timeout;
 	int x, y, width, height;
 	XDamageNotifyEvent* notify;
 	xfEventRegion* event_region;
-
+	xfEvent* event;
+	HGDI_RECT damaged_rect, devent_rect;
+	
 	client = (freerdp_peer*) param;
 	xfp = (xfPeerContext*) client->context;
 	xfi = xfp->info;
-
-	fds = xfi->xfds;
-	wait_interval = (1000000 / 2500);
-	memset(&timeout, 0, sizeof(struct timeval));
-
-	pthread_create(&(xfp->frame_rate_thread), 0, xf_frame_rate_thread, (void*) client);
-
+	
+	wait_interval = 1000000 / xfp->fps;
+	
 	while (1)
 	{
-		// check if we should terminate
+		/* check if we should terminate */
 		pthread_testcancel();
-
-		FD_ZERO(&rfds_set);
-		FD_SET(fds, &rfds_set);
-
-		timeout.tv_sec = 0;
-		timeout.tv_usec = wait_interval;
-		select_status = select(fds + 1, &rfds_set, NULL, NULL, &timeout);
-
-		if (select_status == -1)
-		{
-			printf("select failed\n");
-		}
-		else if (select_status == 0)
-		{
-			//printf("select timeout\n");
-		}
-
+		
+		/*
+		 * Since pthread_testcancel may not return,
+		 * make new rectangles for each iteration.
+		 */
+		damaged_rect = gdi_CreateRect(0, 0, 0, 0);
+		devent_rect = gdi_CreateRect(0, 0, 0, 0);
+		
+		/*
+		 * Process all XDamage events since last frame
+		 * and combine them into a bounding rectangle
+		 * of all the damaged areas.
+		 */
 		pthread_mutex_lock(&(xfp->mutex));
 		pending_events = XPending(xfi->display);
-		pthread_mutex_unlock(&(xfp->mutex));
-
-		if (pending_events > 0)
+		while (pending_events-- > 0)
 		{
-			pthread_mutex_lock(&(xfp->mutex));
 			memset(&xevent, 0, sizeof(xevent));
 			XNextEvent(xfi->display, &xevent);
-			pthread_mutex_unlock(&(xfp->mutex));
-
+			
 			if (xevent.type == xfi->xdamage_notify_event)
 			{
 				notify = (XDamageNotifyEvent*) &xevent;
-
-				x = notify->area.x;
-				y = notify->area.y;
-				width = notify->area.width;
-				height = notify->area.height;
-
-				xf_xdamage_subtract_region(xfp, x, y, width, height);
-
-				event_region = xf_event_region_new(x, y, width, height);
-				xf_event_push(xfp->event_queue, (xfEvent*) event_region);
+				
+				gdi_CRgnToRect(notify->area.x, notify->area.y, 
+							notify->area.width, notify->area.height, 
+							devent_rect);
+				
+				gdi_UnionRect(damaged_rect, damaged_rect, devent_rect);
 			}
 		}
+		pthread_mutex_unlock(&(xfp->mutex));
+		
+		if (!gdi_IsRectEmpty(damaged_rect))
+		{
+			/*
+			 * Some areas were damaged since last frame.
+			 * Use the bounding rectangle both for xdamage
+			 * subtraction and for frame update region.
+			 */
+			gdi_RectToCRgn(damaged_rect, &x, &y, &width, &height);
+			
+			xf_xdamage_subtract_region(xfp, x, y, width, height);
+			
+			event_region = xf_event_region_new(x, y, width, height);
+			xf_event_push(xfp->event_queue, (xfEvent*) event_region);
+			
+			event = xf_event_new(XF_EVENT_TYPE_FRAME_TICK);
+			xf_event_push(xfp->event_queue, (xfEvent*) event);
+		}
+		gdi_DeleteObject((HGDIOBJECT)damaged_rect);
+		gdi_DeleteObject((HGDIOBJECT)devent_rect);
+		
+		freerdp_usleep(wait_interval);
 	}
-
+	
 	return NULL;
 }
