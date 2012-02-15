@@ -491,10 +491,12 @@ boolean xf_peer_check_fds(freerdp_peer* client)
 	if (xfp->activated == false)
 		return true;
 
-	event = xf_event_peek(xfp->event_queue);
-
-	if (event != NULL)
+	while (1)
 	{
+		event = xf_event_peek(xfp->event_queue);
+		if (event == NULL)
+			return true;
+		
 		if (event->type == XF_EVENT_TYPE_REGION)
 		{
 			xfEventRegion* region = (xfEventRegion*) xf_event_pop(xfp->event_queue);
