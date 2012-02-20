@@ -27,7 +27,7 @@
 #include <X11/Xlib.h>
 #include <X11/Xutil.h>
 #include <sys/select.h>
-#include <freerdp/kbd/kbd.h>
+#include <freerdp/locale/keyboard.h>
 #include <freerdp/codec/color.h>
 #include <freerdp/utils/file.h>
 #include <freerdp/utils/sleep.h>
@@ -249,7 +249,7 @@ xfInfo* xf_info_init()
 
 	xfi->bytesPerPixel = 4;
 
-	freerdp_kbd_init(xfi->display, 0);
+	freerdp_keyboard_init(0);
 
 	return xfi;
 }
@@ -629,8 +629,8 @@ void* xf_peer_main_loop(void* arg)
 	settings->cert_file = freerdp_construct_path(server_file_path, "server.crt");
 	settings->privatekey_file = freerdp_construct_path(server_file_path, "server.key");
 
-	settings->nla_security = false;
-	//settings->nla_security = true;
+	//settings->nla_security = false;
+	settings->nla_security = true;
 
 	settings->rfx_codec = true;
 
