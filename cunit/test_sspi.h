@@ -1,8 +1,8 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
- * Memory Utils
+ * FreeRDP: A Remote Desktop Protocol Implementation
+ * Security Support Provider Interface (SSPI) Tests
  *
- * Copyright 2009-2011 Jay Sorg
+ * Copyright 2012 Marc-Andre Moreau <marcandre.moreau@gmail.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,20 +17,13 @@
  * limitations under the License.
  */
 
-#ifndef __MEMORY_UTILS_H
-#define __MEMORY_UTILS_H
+#include "test_freerdp.h"
 
-#include <stddef.h>
-#include <freerdp/api.h>
+int init_sspi_suite(void);
+int clean_sspi_suite(void);
+int add_sspi_suite(void);
 
-FREERDP_API void* xmalloc(size_t size);
-FREERDP_API void* xzalloc(size_t size);
-FREERDP_API void* xrealloc(void* ptr, size_t size);
-FREERDP_API void xfree(void* ptr);
-FREERDP_API char* xstrdup(const char* str);
-
-#define xnew(_type) (_type*)xzalloc(sizeof(_type))
-
-#define ARRAY_SIZE(_x) (sizeof(_x)/sizeof(*(_x)))
-
-#endif /* __MEMORY_UTILS_H */
+void test_EnumerateSecurityPackages(void);
+void test_QuerySecurityPackageInfo(void);
+void test_AcquireCredentialsHandle(void);
+void test_InitializeSecurityContext(void);

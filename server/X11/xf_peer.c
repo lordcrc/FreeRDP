@@ -484,7 +484,6 @@ boolean xf_peer_check_fds(freerdp_peer* client)
 	xfEvent* event;
 	xfPeerContext* xfp;
 	HGDI_RGN invalid_region;
-	boolean frame_tick;
 
 	xfp = (xfPeerContext*) client->context;
 	xfi = xfp->info;
@@ -492,14 +491,10 @@ boolean xf_peer_check_fds(freerdp_peer* client)
 	if (xfp->activated == false)
 		return true;
 
-	frame_tick = false;
-	
-	while (1)
+	event = xf_event_peek(xfp->event_queue);
+
+	if (event != NULL)
 	{
-		event = xf_event_peek(xfp->event_queue);
-		if (event == NULL)
-			break;
-		
 		if (event->type == XF_EVENT_TYPE_REGION)
 		{
 			xfEventRegion* region = (xfEventRegion*) xf_event_pop(xfp->event_queue);
@@ -509,25 +504,21 @@ boolean xf_peer_check_fds(freerdp_peer* client)
 		else if (event->type == XF_EVENT_TYPE_FRAME_TICK)
 		{
 			event = xf_event_pop(xfp->event_queue);
-			frame_tick = true;
+			invalid_region = xfp->hdc->hwnd->invalid;
+
+			if (invalid_region->null == false)
+			{
+				xf_peer_rfx_update(client, invalid_region->x, invalid_region->y,
+					invalid_region->w, invalid_region->h);
+			}
+
+			invalid_region->null = 1;
+			xfp->hdc->hwnd->ninvalid = 0;
+
 			xf_event_free(event);
 		}
 	}
 
-	if (frame_tick)
-	{
-		invalid_region = xfp->hdc->hwnd->invalid;
-
-		if (invalid_region->null == false)
-		{
-			xf_peer_rfx_update(client, invalid_region->x, invalid_region->y,
-				invalid_region->w, invalid_region->h);
-		}
-
-		invalid_region->null = 1;
-		xfp->hdc->hwnd->ninvalid = 0;
-
-	}
 	return true;
 }
 
@@ -637,7 +628,6 @@ void* xf_peer_main_loop(void* arg)
 	settings->privatekey_file = freerdp_construct_path(server_file_path, "server.key");
 
 	settings->nla_security = false;
-	//settings->nla_security = true;
 
 	settings->rfx_codec = true;
 
@@ -710,8 +700,10 @@ void* xf_peer_main_loop(void* arg)
 	client->Disconnect(client);
 	
 	pthread_cancel(xfp->thread);
+	pthread_cancel(xfp->frame_rate_thread);
 	
 	pthread_join(xfp->thread, NULL);
+	pthread_join(xfp->frame_rate_thread, NULL);
 	
 	freerdp_peer_context_free(client);
 	freerdp_peer_free(client);

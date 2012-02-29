@@ -1,4 +1,4 @@
-/**
+/*
  * FreeRDP: A Remote Desktop Protocol client.
  * Arguments Parsing
  *
@@ -101,6 +101,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				"  --ntlm: force NTLM authentication protocol version (1 or 2)\n"
 				"  --ignore-certificate: ignore verification of logon certificate\n"
 				"  --sec: force protocol security (rdp, tls or nla)\n"
+				"  --kbd-list: list all keyboard layout ids used by -k\n"
 				"  --salted-checksum: use salted checksums with Standard RDP encryption\n"
 				"  --version: print version information\n"
 				"\n", argv[0]);
@@ -595,7 +596,7 @@ int freerdp_parse_args(rdpSettings* settings, int argc, char** argv,
 				printf("missing extension name\n");
 				return FREERDP_ARGS_PARSE_FAILURE;
 			}
-			if (num_extensions >= sizeof(settings->extensions) / sizeof(struct rdp_ext_set))
+			if (num_extensions >= ARRAY_SIZE(settings->extensions))
 			{
 				printf("maximum extensions reached\n");
 				return FREERDP_ARGS_PARSE_FAILURE;

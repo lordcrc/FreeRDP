@@ -1,8 +1,8 @@
 /**
- * FreeRDP: A Remote Desktop Protocol Client
+ * FreeRDP: A Remote Desktop Protocol Implementation
  * Transport Layer Security
  *
- * Copyright 2011 Marc-Andre Moreau <marcandre.moreau@gmail.com>
+ * Copyright 2011-2012 Marc-Andre Moreau <marcandre.moreau@gmail.com>
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -128,13 +128,19 @@ boolean tls_accept(rdpTls* tls, const char* cert_file, const char* privatekey_fi
 {
 	int connection_status;
 
-	tls->ctx = SSL_CTX_new(TLSv1_server_method());
+	tls->ctx = SSL_CTX_new(SSLv23_server_method());
 
 	if (tls->ctx == NULL)
 	{
 		printf("SSL_CTX_new failed\n");
 		return false;
 	}
+
+	/*
+	 * We only want SSLv3 and TLSv1, so disable SSLv2.
+	 * SSLv3 is used by, eg. Microsoft RDC for Mac OS X.
+	 */
+	SSL_CTX_set_options(tls->ctx, SSL_OP_NO_SSLv2);
 
 	if (SSL_CTX_use_RSAPrivateKey_file(tls->ctx, privatekey_file, SSL_FILETYPE_PEM) <= 0)
 	{
@@ -231,6 +237,14 @@ int tls_write(rdpTls* tls, uint8* data, int length)
 	return status;
 }
 
+static void tls_errors(const char *prefix)
+{
+	unsigned long error;
+
+	while ((error = ERR_get_error()) != 0)
+		printf("%s: %s\n", prefix, ERR_error_string(error, NULL));
+}
+
 boolean tls_print_error(char* func, SSL* connection, int value)
 {
 	switch (SSL_get_error(connection, value))
@@ -249,14 +263,17 @@ boolean tls_print_error(char* func, SSL* connection, int value)
 
 		case SSL_ERROR_SYSCALL:
 			printf("%s: I/O error\n", func);
+			tls_errors(func);
 			return true;
 
 		case SSL_ERROR_SSL:
 			printf("%s: Failure in SSL library (protocol error?)\n", func);
+			tls_errors(func);
 			return true;
 
 		default:
 			printf("%s: Unknown error\n", func);
+			tls_errors(func);
 			return true;
 	}
 }
@@ -265,13 +282,14 @@ boolean tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname)
 {
 	int match;
 	int index;
-	char* common_name;
-	int common_name_length;
-	char** alt_names;
-	int alt_names_count;
-	int* alt_names_lengths;
+	char* common_name = NULL;
+	int common_name_length = 0;
+	char** alt_names = NULL;
+	int alt_names_count = 0;
+	int* alt_names_lengths = NULL;
 	boolean certificate_status;
 	boolean hostname_match = false;
+	boolean verification_status = false;
 	rdpCertificateData* certificate_data;
 
 	/* ignore certificate verification if user explicitly required it (discouraged) */
@@ -319,7 +337,12 @@ boolean tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname)
 
 	/* if the certificate is valid and the certificate name matches, verification succeeds */
 	if (certificate_status && hostname_match)
-		return true; /* success! */
+	{
+		if (common_name)
+			xfree(common_name);
+
+		verification_status = true; /* success! */
+	}
 
 	/* if the certificate is valid but the certificate name does not match, warn user, do not accept */
 	if (certificate_status && !hostname_match)
@@ -333,7 +356,6 @@ boolean tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname)
 		char* subject;
 		char* fingerprint;
 		boolean accept_certificate = false;
-		boolean verification_status = false;
 
 		issuer = crypto_cert_issuer(cert->px509);
 		subject = crypto_cert_subject(cert->px509);
@@ -380,11 +402,29 @@ boolean tls_verify_certificate(rdpTls* tls, CryptoCert cert, char* hostname)
 		xfree(issuer);
 		xfree(subject);
 		xfree(fingerprint);
-
-		return verification_status;
 	}
 
-	return false;
+#ifndef _WIN32
+	if (common_name)
+		xfree(common_name);
+
+	if (alt_names)
+	{
+		for (index = 0; index < alt_names_count; index++)
+			xfree(alt_names[index]);
+
+		xfree(alt_names);
+	}
+#endif
+
+	if (certificate_data)
+	{
+		xfree(certificate_data->fingerprint);
+		xfree(certificate_data->hostname);
+		xfree(certificate_data);
+	}
+
+	return verification_status;
 }
 
 void tls_print_certificate_error(char* hostname, char* fingerprint)
